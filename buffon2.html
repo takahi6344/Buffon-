@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ビュッフォンの針</title>
+<style>
+:root{
+  --bg:#fafaf7;--surface:#ffffff;--text:#1f2328;--muted:#656d76;--line:#b8bdc4;--border:#d8dce0;
+  --hit:#e0443e;--miss:#2f6fd6;--accent:#1f2328;--accent-text:#ffffff;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;--bg:#16181b;--surface:#1f2226;--text:#e6e8ea;--muted:#9aa1a9;--line:#4a5058;--border:#343940;
+    --hit:#ff6b64;--miss:#6ea2ff;--accent:#e6e8ea;--accent-text:#16181b;
+  }
+}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#16181b;--surface:#1f2226;--text:#e6e8ea;--muted:#9aa1a9;--line:#4a5058;--border:#343940;--hit:#ff6b64;--miss:#6ea2ff;--accent:#e6e8ea;--accent-text:#16181b}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;line-height:1.5}
+main{max-width:760px;margin:0 auto;padding:20px 16px 32px}
+h1{font-size:1.3rem;margin:0 0 4px}
+p.sub{margin:0 0 16px;color:var(--muted);font-size:.9rem}
+.stage{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;aspect-ratio:8/5}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.stat span{display:block;font-size:.75rem;color:var(--muted)}
+.stat b{font-size:1.25rem;font-variant-numeric:tabular-nums}
+.stat.big b{font-size:1.6rem}
+.stat.wide{grid-column:1/-1}
+.controls{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin-bottom:10px}
+button,select{font:inherit;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:8px 12px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+label{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--muted)}
+input[type=range]{width:140px}
+.legend{display:flex;gap:16px;margin-top:12px;font-size:.85rem;color:var(--muted)}
+.dot{display:inline-block;width:18px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+.note{margin-top:14px;font-size:.8rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>ビュッフォンの針（針金版）</h1>
+  <p class="sub">針金の長さと形を選んで、平行線の上に落としてみましょう。</p>
+
+  <div class="controls">
+    <label>長さ
+      <select id="len">
+        <option value="0.5" selected>線の間隔の半分</option>
+        <option value="1">線の間隔と同じ</option>
+        <option value="2">線の間隔の2倍</option>
+        <option value="3.141592653589793">線の間隔のπ倍（円なら直径＝線の間隔）</option>
+      </select>
+    </label>
+    <label>形
+      <select id="shape">
+        <option value="straight" selected>まっすぐ ／</option>
+        <option value="v">V字</option>
+        <option value="m">M字</option>
+        <option value="n">N字</option>
+        <option value="circle">円（輪っか）</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="stage"><canvas id="bg"></canvas><canvas id="fg"></canvas></div>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--hit)"></i>線と1回以上交わった針金</span>
+    <span><i class="dot" style="background:var(--miss)"></i>交わらなかった針金</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span>針金の本数</span><b id="n">0</b></div>
+    <div class="stat"><span>1回以上交わった割合</span><b id="p">–</b></div>
+    <div class="stat wide"><span>交差点の合計 ÷ 投げた回数 = 交差点の平均（理論値 <i id="th">0.318</i>）</span><b id="m">–</b></div>
+    <div class="stat big"><span>π の推定値<em id="estNote" style="font-style:normal"></em></span><b id="est">–</b></div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="toggle">スタート</button>
+    <button id="one">1本落とす</button>
+    <button id="reset">リセット</button>
+    <label>速さ <input type="range" id="speed" min="0" max="4" step="1" value="1"><span id="speedLabel"></span></label>
+  </div>
+
+  <p class="note">π の推定値は「交差回数の平均 = 2 × 針金の長さ ÷ (π × 線の間隔)」から求めています。この式は針金をどう曲げても、長さだけで決まります（バルビエの定理）。長い針金は1本で何回も線と交わるので、「交わる確率」ではなく「交わった回数の平均」を使います。V・M・N字の曲がり具合は固定です。円（輪っか）は、選んだ長さが円周になります。「線の間隔のπ倍」を選ぶと、長さに π を使っているため、π の推定値は表示しません。向きは π を使わず、単位円内の一様な点から決めています。</p>
+</main>
+
+<script>
+(function(){
+  var W = 800, H = 500, D = 100, OFF = 50;
+  var bg = document.getElementById('bg'), fg = document.getElementById('fg');
+  var ctxB = bg.getContext('2d'), ctxF = fg.getContext('2d');
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  [bg, fg].forEach(function(c){ c.width = W*dpr; c.height = H*dpr; });
+  ctxB.setTransform(dpr,0,0,dpr,0,0); ctxF.setTransform(dpr,0,0,dpr,0,0);
+  var el = function(id){ return document.getElementById(id); };
+  var cs = function(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
+
+  // 形（単位座標。長さは後で指定の全長に正規化）
+  var SHAPES = {
+    straight: [[0,0],[1,0]],
+    v: [[-1,-1],[0,0],[1,-1]],
+    m: [[0,0],[0,-1],[0.5,-0.4],[1,-1],[1,0]],
+    n: [[0,0],[0,-1],[0.7,0],[0.7,-1]],
+    circle: (function(){ var a = [], N = 120; for (var i = 0; i <= N; i++){ var t = 2*Math.PI*i/N; a.push([Math.cos(t), Math.sin(t)]); } return a; })()
+  };
+  var ratio = 0.5, local = [], isPi = false;
+  function build(){
+    var pts = SHAPES[el('shape').value], len = 0, i;
+    for (i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]);
+    var k = ratio * D / len, cx = 0, cy = 0;
+    pts.forEach(function(p){ cx += p[0]; cy += p[1]; });
+    cx /= pts.length; cy /= pts.length;
+    local = pts.map(function(p){ return [(p[0]-cx)*k, (p[1]-cy)*k]; });
+  }
+
+  function drawLines(){
+    ctxB.clearRect(0,0,W,H);
+    ctxB.strokeStyle = cs('--line'); ctxB.lineWidth = 1.5;
+    for (var y = OFF; y < H + D; y += D){ ctxB.beginPath(); ctxB.moveTo(0,y); ctxB.lineTo(W,y); ctxB.stroke(); }
+  }
+
+  var n = 0, hitW = 0, cross = 0, running = false, speedIdx = 1;
+  var rates = [1, 5, 25, 150, 1000];
+
+  function randDir(){
+    var x, y, r2;
+    do { x = Math.random()*2-1; y = Math.random()*2-1; r2 = x*x + y*y; } while (r2 > 1 || r2 === 0);
+    var r = Math.sqrt(r2); return [x/r, y/r];
+  }
+
+  var hitColor, missColor;
+  function drop(){
+    var cx = Math.random()*W, cy = Math.random()*H, d = randDir(), dx = d[0], dy = d[1];
+    var P = local.map(function(p){ return [cx + p[0]*dx - p[1]*dy, cy + p[0]*dy + p[1]*dx]; });
+    var c = 0, i;
+    for (i = 1; i < P.length; i++){
+      c += Math.abs(Math.floor((P[i-1][1]-OFF)/D) - Math.floor((P[i][1]-OFF)/D));
+    }
+    n++; cross += c; if (c > 0) hitW++;
+    ctxF.strokeStyle = c > 0 ? hitColor : missColor;
+    ctxF.globalAlpha = n > 2000 ? 0.3 : 0.8;
+    ctxF.lineWidth = 2; ctxF.lineCap = 'round'; ctxF.lineJoin = 'round';
+    ctxF.beginPath(); ctxF.moveTo(P[0][0], P[0][1]);
+    for (i = 1; i < P.length; i++) ctxF.lineTo(P[i][0], P[i][1]);
+    ctxF.stroke();
+  }
+
+  function updateStats(){
+    el('n').textContent = n.toLocaleString('ja-JP');
+    if (n > 0){
+      el('p').textContent = (hitW/n).toFixed(4);
+      el('m').textContent = cross.toLocaleString('ja-JP') + ' ÷ ' + n.toLocaleString('ja-JP') + ' = ' + (cross/n).toFixed(4);
+      el('est').textContent = (cross > 0 && !isPi) ? (2*ratio*n/cross).toFixed(5) : '–';
+    } else { el('p').textContent = el('m').textContent = el('est').textContent = '–'; }
+  }
+
+  function frame(){
+    if (!running) return;
+    hitColor = cs('--hit'); missColor = cs('--miss');
+    for (var i = 0; i < rates[speedIdx]; i++) drop();
+    updateStats(); requestAnimationFrame(frame);
+  }
+  function setRunning(r){
+    running = r;
+    el('toggle').textContent = r ? 'ストップ' : (n > 0 ? '再開' : 'スタート');
+    if (r) requestAnimationFrame(frame);
+  }
+  function reset(){
+    setRunning(false); n = 0; hitW = 0; cross = 0;
+    ratio = parseFloat(el('len').value); build();
+    isPi = Math.abs(ratio - Math.PI) < 1e-9;
+    el('estNote').textContent = isPi ? '（長さに π を使うため求められません）' : '';
+    el('th').textContent = (2*ratio/Math.PI).toFixed(4);
+    ctxF.clearRect(0,0,W,H); updateStats(); el('toggle').textContent = 'スタート';
+  }
+
+  el('toggle').onclick = function(){ setRunning(!running); };
+  el('one').onclick = function(){
+    setRunning(false); hitColor = cs('--hit'); missColor = cs('--miss');
+    drop(); updateStats(); el('toggle').textContent = '再開';
+  };
+  el('reset').onclick = reset;
+  el('len').onchange = reset; el('shape').onchange = reset;
+  el('speed').oninput = function(e){ speedIdx = +e.target.value; el('speedLabel').textContent = rates[speedIdx] + '本/フレーム'; };
+  el('speedLabel').textContent = rates[speedIdx] + '本/フレーム';
+
+  drawLines(); reset();
+  if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawLines);
+})();
+</script>
+</body>
+</html>
